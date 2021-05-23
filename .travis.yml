@@ -1,0 +1,55 @@
+matrix:
+  include:
+    - language: go # Build and Test
+      sudo: required
+      services:
+        - docker
+      script:
+        - export GO111MODULE=on
+        - go mod vendor
+        - make build
+        - test -f bin/linux_amd64/selithrarion_go
+        - make all-container
+        - docker images | grep "^docker.pkg.github.com/martinheinz/go-project-blueprint/blueprint.*__linux_amd64"
+        - make test
+
+    - language: go  # SonarCloud
+      addons:
+        sonarcloud:
+          organization: selithrarion
+          token:
+            secure: nil
+      before_script:
+        - ./reports.sh
+        - export GO111MODULE=on
+        - go mod vendor
+        - make ci
+      script:
+        - sonar-scanne
+
+    - language: go  # CodeClimate
+      before_script:
+        - ./reports.sh
+        - curl -L https://codeclimate.com/downloads/test-reporter/test-reporter-latest-linux-amd64 > ./cc-test-reporter
+        - chmod +x ./cc-test-reporter
+        - ./cc-test-reporter before-build
+      script:
+        - export GO111MODULE=on
+        - go mod vendor
+        - make ci
+      after_script:
+        - ./cc-test-reporter after-build -t gocov --exit-code $TRAVIS_TEST_RESULT
+
+    - language: go  # Push if on master
+      services:
+        - docker
+      if: branch = master
+      script:
+        - export GO111MODULE=on
+        - go mod vendor
+        - echo "$DOCKER_PASSWORD" | docker login docker.pkg.github.com -u "$DOCKER_USERNAME" --password-stdin
+        - make container
+        - make push
+
+notifications:
+  email: false
